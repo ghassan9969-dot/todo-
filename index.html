@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>قائمة المهام</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23333'/%3E%3Cpath d='M30 52 L45 67 L72 35' stroke='white' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: #0d0d0d;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 30px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    h1 {
+      text-align: center;
+      color: #f0f0f0;
+      margin-bottom: 8px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    .input-area {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .input-area input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #444;
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.3s;
+      background: #2a2a2a;
+      color: #f0f0f0;
+    }
+
+    .input-area input::placeholder {
+      color: #777;
+    }
+
+    .input-area input:focus {
+      border-color: #888;
+    }
+
+    .input-area button {
+      padding: 12px 24px;
+      background: #333;
+      color: #f0f0f0;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+      white-space: nowrap;
+    }
+
+    .input-area button:hover {
+      background: #444;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #333;
+    }
+
+    .stats .count {
+      color: #ccc;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .stats button {
+      background: none;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .stats button:hover {
+      background: #2a2a2a;
+    }
+
+    .task-list {
+      list-style: none;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .task-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .task-list::-webkit-scrollbar-thumb {
+      background: #555;
+      border-radius: 3px;
+    }
+
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: #2a2a2a;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      transition: all 0.3s;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .task-item:hover {
+      background: #333;
+    }
+
+    .task-item .task-text {
+      flex: 1;
+      font-size: 15px;
+      color: #f0f0f0;
+      word-break: break-word;
+    }
+
+    .task-item .task-text.completed {
+      text-decoration: line-through;
+      color: #666;
+    }
+
+    .task-item .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .task-item .actions button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 4px;
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .task-item .actions .done-btn {
+      color: #ccc;
+    }
+
+    .task-item .actions .done-btn:hover {
+      background: #3a3a3a;
+    }
+
+    .task-item .actions .delete-btn {
+      color: #ccc;
+    }
+
+    .task-item .actions .delete-btn:hover {
+      background: #3a2a2a;
+    }
+
+    .empty-msg {
+      text-align: center;
+      color: #777;
+      padding: 30px 0;
+      font-size: 16px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #222;
+      color: #f0f0f0;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      opacity: 0;
+      transition: all 0.4s;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📋 قائمة المهام</h1>
+  <p class="subtitle">نظم يومك بكل سهولة</p>
+
+  <div class="input-area">
+    <input type="text" id="taskInput" placeholder="اكتب مهمة جديدة..." maxlength="200">
+    <button onclick="addTask()">إضافة</button>
+  </div>
+
+  <div class="stats">
+    <span class="count">المهام: <span id="taskCount">0</span></span>
+    <button onclick="clearAll()">🗑️ حذف الكل</button>
+  </div>
+
+  <ul class="task-list" id="taskList">
+    <li class="empty-msg">لا توجد مهام بعد ✨</li>
+  </ul>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let tasks = [];
+
+  function loadTasks() {
+    const stored = localStorage.getItem('todoTasks');
+    if (stored) {
+      try {
+        tasks = JSON.parse(stored);
+      } catch {
+        tasks = [];
+      }
+    }
+  }
+
+  function saveTasks() {
+    localStorage.setItem('todoTasks', JSON.stringify(tasks));
+  }
+
+  function render() {
+    const list = document.getElementById('taskList');
+    const count = document.getElementById('taskCount');
+
+    if (tasks.length === 0) {
+      list.innerHTML = '<li class="empty-msg">لا توجد مهام بعد ✨</li>';
+    } else {
+      list.innerHTML = tasks.map((task, index) => `
+        <li class="task-item">
+          <span class="task-text ${task.done ? 'completed' : ''}">${escapeHtml(task.text)}</span>
+          <div class="actions">
+            <button class="done-btn" onclick="toggleDone(${index})" title="${task.done ? 'إلغاء الإنجاز' : 'تمت'}">${task.done ? '↩️' : '✅'}</button>
+            <button class="delete-btn" onclick="deleteTask(${index})" title="حذف">❌</button>
+          </div>
+        </li>
+      `).join('');
+    }
+
+    count.textContent = tasks.length;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function addTask() {
+    const input = document.getElementById('taskInput');
+    const text = input.value.trim();
+
+    if (!text) {
+      showToast('⚠️ الرجاء كتابة المهمة أولاً');
+      input.focus();
+      return;
+    }
+
+    tasks.push({ text, done: false });
+    saveTasks();
+    render();
+    input.value = '';
+    input.focus();
+    showToast('✅ تم إضافة المهمة بنجاح');
+  }
+
+  function deleteTask(index) {
+    const removed = tasks[index].text;
+    tasks.splice(index, 1);
+    saveTasks();
+    render();
+    showToast(`🗑️ تم حذف "${removed}"`);
+  }
+
+  function toggleDone(index) {
+    tasks[index].done = !tasks[index].done;
+    saveTasks();
+    render();
+  }
+
+  function clearAll() {
+    if (tasks.length === 0) return;
+    if (!confirm('هل أنت متأكد من حذف جميع المهام؟')) return;
+    tasks = [];
+    saveTasks();
+    render();
+    showToast('🗑️ تم حذف جميع المهام');
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2000);
+  }
+
+  document.getElementById('taskInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') addTask();
+  });
+
+  loadTasks();
+  render();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
+
+</body>
+</html>
