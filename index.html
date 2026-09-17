@@ -157,8 +157,10 @@
       padding: 6px 10px;
       background: var(--surface-2);
       border-radius: 10px;
-      margin-bottom: 8px;
+      margin-bottom: 8px; /* لا تغيّره دون تحديث GAP في الـ JS */
       transition: background 0.3s;
+      user-select: none;
+      -webkit-touch-callout: none; /* يمنع قائمة iOS عند الضغط المطوّل */
     }
 
     /* الأنيميشن على المهمة الجديدة فقط، لا على كل القائمة عند كل render */
@@ -170,6 +172,19 @@
     }
 
     .task-item:hover { background: var(--surface-3); }
+
+    /* البطاقة المرفوعة تتبع الإصبع */
+    .task-item.dragging {
+      position: relative;
+      z-index: 10;
+      background: var(--surface-3);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+      touch-action: none;
+      cursor: grabbing;
+    }
+
+    /* البطاقات الأخرى تفسح المكان */
+    .task-item.shifting { transition: transform 0.18s ease; }
 
     .check {
       flex: none;
@@ -575,6 +590,123 @@
     undoHandler = null;
   }
 
+  /* ---------- السحب لإعادة الترتيب (ضغطة مطوّلة) ---------- */
+
+  const LONG_PRESS_MS = 400;
+  const MOVE_TOLERANCE = 10; // حركة أكبر من هذا قبل الرفع = تمرير، لا سحب
+  const GAP = 8;             // = margin-bottom للبطاقة
+
+  let press = null;          // ضغطة قيد الانتظار
+  let drag = null;           // سحب جارٍ
+  let justDragged = false;
+
+  function cancelPress() {
+    if (press) {
+      clearTimeout(press.timer);
+      press = null;
+    }
+  }
+
+  function onPointerDown(e) {
+    justDragged = false;
+    if (editingId || tasks.length < 2) return;
+    if (e.button != null && e.button !== 0) return;
+
+    const el = e.target.closest('.task-item');
+    if (!el || e.target.closest('button')) return; // الأزرار تحتفظ بوظائفها
+
+    const y = e.clientY;
+    press = {
+      startX: e.clientX,
+      startY: y,
+      timer: setTimeout(() => startDrag(el, y), LONG_PRESS_MS)
+    };
+  }
+
+  function startDrag(el, y) {
+    press = null;
+
+    const items = Array.from($('taskList').querySelectorAll('.task-item'));
+    const fromIndex = items.indexOf(el);
+    if (fromIndex === -1) return;
+
+    const rects = items.map((n) => n.getBoundingClientRect());
+    drag = {
+      el, items, rects, fromIndex,
+      toIndex: fromIndex,
+      startY: y,
+      height: rects[fromIndex].height
+    };
+
+    el.classList.add('dragging');
+    items.forEach((n) => { if (n !== el) n.classList.add('shifting'); });
+    if (navigator.vibrate) navigator.vibrate(30); // إحساس الالتقاط
+  }
+
+  function applyShift() {
+    const { items, fromIndex, toIndex, height } = drag;
+    const offset = height + GAP;
+
+    items.forEach((n, i) => {
+      if (i === fromIndex) return;
+      let shift = 0;
+      if (toIndex > fromIndex && i > fromIndex && i <= toIndex) shift = -offset;
+      else if (toIndex < fromIndex && i >= toIndex && i < fromIndex) shift = offset;
+      n.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  }
+
+  function onPointerMove(e) {
+    if (press) {
+      // تحرّك كثير قبل اكتمال الضغطة → المستخدم يمرّر الصفحة
+      if (Math.abs(e.clientY - press.startY) > MOVE_TOLERANCE ||
+          Math.abs(e.clientX - press.startX) > MOVE_TOLERANCE) cancelPress();
+      return;
+    }
+    if (!drag) return;
+
+    const dy = e.clientY - drag.startY;
+    drag.el.style.transform = `translateY(${dy}px)`;
+
+    // الموضع الجديد = كم منتصف بطاقة تجاوزه منتصف البطاقة المسحوبة
+    const r = drag.rects[drag.fromIndex];
+    const centerY = r.top + r.height / 2 + dy;
+
+    let to = drag.fromIndex;
+    while (to < drag.items.length - 1) {
+      const n = drag.rects[to + 1];
+      if (centerY > n.top + n.height / 2) to++; else break;
+    }
+    while (to > 0) {
+      const n = drag.rects[to - 1];
+      if (centerY < n.top + n.height / 2) to--; else break;
+    }
+
+    if (to !== drag.toIndex) {
+      drag.toIndex = to;
+      applyShift();
+    }
+  }
+
+  function endDrag(commit) {
+    if (!drag) { cancelPress(); return; }
+
+    const { el, items, fromIndex, toIndex } = drag;
+    el.classList.remove('dragging');
+    el.style.transform = '';
+    items.forEach((n) => { n.classList.remove('shifting'); n.style.transform = ''; });
+
+    drag = null;
+    justDragged = true; // لا تُفسّر نهاية السحب كنقرة
+
+    if (commit && toIndex !== fromIndex) {
+      const [moved] = tasks.splice(fromIndex, 1);
+      tasks.splice(toIndex, 0, moved);
+      saveTasks();
+      render();
+    }
+  }
+
   /* ---------- الأحداث ---------- */
 
   $('addBtn').addEventListener('click', addTask);
@@ -591,6 +723,7 @@
 
   // event delegation: مستمع واحد يخدم كل المهام
   $('taskList').addEventListener('click', (e) => {
+    if (justDragged) { justDragged = false; return; } // نهاية سحب، لا نقرة
     const item = e.target.closest('.task-item');
     if (!item) return;
     const id = item.dataset.id;
@@ -612,6 +745,25 @@
       commitEdit(e.target.value);
     }
   });
+
+  // السحب: البداية على القائمة، والتتبّع على المستند حتى لا ينقطع خارجها
+  $('taskList').addEventListener('pointerdown', onPointerDown);
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', () => endDrag(true));
+  document.addEventListener('pointercancel', () => endDrag(false));
+
+  // امنع تمرير الصفحة أثناء السحب فقط (passive:false شرط لعمل preventDefault)
+  $('taskList').addEventListener('touchmove', (e) => {
+    if (drag) e.preventDefault();
+  }, { passive: false });
+
+  // امنع قائمة السياق التي تظهر مع الضغط المطوّل
+  $('taskList').addEventListener('contextmenu', (e) => {
+    if (drag || press) e.preventDefault();
+  });
+
+  // تمرير الصفحة يلغي الضغطة المنتظرة
+  window.addEventListener('scroll', cancelPress, { passive: true });
 
   /* ---------- الإقلاع ---------- */
 
