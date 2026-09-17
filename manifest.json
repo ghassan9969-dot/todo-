@@ -2,8 +2,12 @@
   "name": "قائمة المهام",
   "short_name": "المهام",
   "description": "تطبيق بسيط لإدارة المهام اليومية",
-  "start_url": ".",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0d0d0d",
   "theme_color": "#1a1a1a",
   "icons": [
