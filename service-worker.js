@@ -1,5 +1,8 @@
-const CACHE = 'todo-cache-v2';
-const URLS = ['./', './index.html', './manifest.json'];
+const CACHE = 'todo-cache-v3';
+const URLS = [
+  './', './index.html', './manifest.json',
+  './icon-180.png', './icon-192.png', './icon-512.png', './icon-512-maskable.png'
+];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
