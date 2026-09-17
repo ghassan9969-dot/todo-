@@ -140,6 +140,36 @@
 
     .stats button:hover { background: var(--surface-2); }
 
+    .filters {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-2);
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+    }
+
+    .filters button {
+      flex: 1;
+      min-height: var(--tap);
+      background: none;
+      border: none;
+      border-radius: 9px;
+      color: var(--text-dim);
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .filters button:hover { color: var(--text); }
+
+    .filters button.active {
+      background: var(--surface-3);
+      color: var(--text);
+      font-weight: bold;
+    }
+
     .task-list {
       list-style: none;
       max-height: 400px;
@@ -382,6 +412,12 @@
     <button id="clearBtn" type="button">🗑️ حذف الكل</button>
   </div>
 
+  <div class="filters" id="filters" hidden>
+    <button type="button" data-filter="all" class="active">الكل</button>
+    <button type="button" data-filter="active">النشطة</button>
+    <button type="button" data-filter="done">المنجزة</button>
+  </div>
+
   <ul class="task-list" id="taskList"></ul>
 </div>
 
@@ -397,6 +433,26 @@
   let justAddedId = null;
   let editingId = null;
   let undoHandler = null;
+  let filter = 'all'; // all | active | done — لا يُحفظ عمداً حتى لا تفتح القائمة فارغة
+
+  const EMPTY_MSG = {
+    all: 'لا توجد مهام بعد ✨',
+    active: 'لا توجد مهام نشطة ✨',
+    done: 'لا توجد مهام منجزة بعد'
+  };
+
+  const CLEAR_LABEL = {
+    all: '🗑️ حذف الكل',
+    active: '🗑️ حذف النشطة',
+    done: '🗑️ حذف المنجزة'
+  };
+
+  // المهام المعروضة حالياً — مصدر الحقيقة لكل ما يعتمد على الترتيب المرئي
+  function visibleTasks() {
+    if (filter === 'active') return tasks.filter((t) => !t.done);
+    if (filter === 'done') return tasks.filter((t) => t.done);
+    return tasks;
+  }
 
   const $ = (id) => document.getElementById(id);
   const newId = () =>
@@ -454,10 +510,12 @@
     const list = $('taskList');
     const count = $('taskCount');
 
-    if (tasks.length === 0) {
-      list.innerHTML = '<li class="empty-msg">لا توجد مهام بعد ✨</li>';
+    const visible = visibleTasks();
+
+    if (visible.length === 0) {
+      list.innerHTML = `<li class="empty-msg">${EMPTY_MSG[filter]}</li>`;
     } else {
-      list.innerHTML = tasks.map((task) => {
+      list.innerHTML = visible.map((task) => {
         const cls = ['task-item'];
         if (task.done) cls.push('done');
         if (task.id === justAddedId) cls.push('is-new');
@@ -481,10 +539,20 @@
 
     justAddedId = null;
 
+    // العدّاد يعكس كل المهام لا المعروضة فقط
     const done = tasks.filter((t) => t.done).length;
     count.textContent = tasks.length === 0
       ? 'لا توجد مهام'
       : `${done} من ${tasks.length} منجزة`;
+
+    $('filters').hidden = tasks.length === 0;
+    $('filters').querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.filter === filter);
+    });
+
+    // الزر يحذف ما تراه، ويقول ذلك
+    $('clearBtn').textContent = CLEAR_LABEL[filter];
+    $('clearBtn').hidden = visible.length === 0;
 
     if (editingId) {
       const input = document.querySelector('.task-edit-input');
@@ -510,6 +578,9 @@
     const task = { id: newId(), text, done: false, createdAt: Date.now() };
     tasks.push(task);
     justAddedId = task.id;
+
+    // المهمة الجديدة نشطة دائماً، فلا تتركها مخفية خلف فلتر "المنجزة"
+    if (filter === 'done') filter = 'all';
     saveTasks();
     render();
     input.value = '';
@@ -538,16 +609,26 @@
   }
 
   function clearAll() {
-    if (tasks.length === 0) return;
-    const backup = tasks.slice();
-    tasks = [];
+    const visible = visibleTasks();
+    if (visible.length === 0) return;
+
+    const backup = tasks.slice(); // نسخة كاملة، فالتراجع يرجّع كل شيء
+    const doomed = new Set(visible.map((t) => t.id));
+    tasks = tasks.filter((t) => !doomed.has(t.id));
+
     saveTasks();
     render();
-    showToast(`🗑️ حُذفت ${backup.length} مهمة`, () => {
+    showToast(`🗑️ حُذفت ${visible.length} مهمة`, () => {
       tasks = backup;
       saveTasks();
       render();
     });
+  }
+
+  function setFilter(next) {
+    if (next === filter) return;
+    filter = next;
+    render();
   }
 
   /* ---------- التعديل ---------- */
@@ -609,7 +690,7 @@
 
   function onPointerDown(e) {
     justDragged = false;
-    if (editingId || tasks.length < 2) return;
+    if (editingId || visibleTasks().length < 2) return;
     if (e.button != null && e.button !== 0) return;
 
     const el = e.target.closest('.task-item');
@@ -700,8 +781,18 @@
     justDragged = true; // لا تُفسّر نهاية السحب كنقرة
 
     if (commit && toIndex !== fromIndex) {
-      const [moved] = tasks.splice(fromIndex, 1);
-      tasks.splice(toIndex, 0, moved);
+      // fromIndex/toIndex مواضع داخل القائمة المعروضة، وقد تكون مُفلترة.
+      // نترجمها إلى مواضع حقيقية عبر الـ id حتى لا ينكسر الترتيب مع الفلاتر.
+      const visible = visibleTasks();
+      const movedId = visible[fromIndex].id;
+      const targetId = visible[toIndex].id;
+
+      const from = tasks.findIndex((t) => t.id === movedId);
+      const [moved] = tasks.splice(from, 1);
+
+      const target = tasks.findIndex((t) => t.id === targetId);
+      tasks.splice(toIndex > fromIndex ? target + 1 : target, 0, moved);
+
       saveTasks();
       render();
     }
@@ -710,6 +801,11 @@
   /* ---------- الأحداث ---------- */
 
   $('addBtn').addEventListener('click', addTask);
+
+  $('filters').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-filter]');
+    if (btn) setFilter(btn.dataset.filter);
+  });
   $('clearBtn').addEventListener('click', clearAll);
 
   $('taskInput').addEventListener('keydown', (e) => {
