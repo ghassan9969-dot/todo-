@@ -1,4 +1,4 @@
-const CACHE = 'todo-cache-v3';
+const CACHE = 'todo-cache-v4';
 const URLS = [
   './', './index.html', './manifest.json',
   './icon-180.png', './icon-192.png', './icon-512.png', './icon-512-maskable.png'
